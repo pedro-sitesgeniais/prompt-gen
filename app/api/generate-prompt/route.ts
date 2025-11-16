@@ -1,35 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateText } from 'ai'
-import { claudeModel } from '@/lib/ai/client'
 import { PromptGenerationRequest, PromptGenerationResponse } from '@/types/agents'
 import { getAgent } from '@/lib/agents'
-import { generateAnalyzerPrompt } from '@/lib/agents/analyzer'
-
-const PROMPT_GENERATION_SYSTEM = `You are an expert at generating structured prompts for Claude Code.
-Given a user query and context, generate a detailed, well-structured prompt following this format:
-
-## Objetivo
-[Clear, specific objective]
-
-## Contexto do Projeto
-[Stack, structure, patterns]
-
-## Task Breakdown
-1. [Detailed subtask]
-2. [Detailed subtask]
-...
-
-## Constraints & Best Practices
-- [Specific constraints]
-- [Patterns to follow]
-
-## Files to Focus
-- [Relevant files]
-
-## Expected Output
-[Format and success criteria]
-
-Make sure the prompt is actionable, specific, and provides all necessary context for Claude Code to succeed.`
+import {
+  generateAnalyzerPrompt,
+  generateRefactorPrompt,
+  generateFeaturePrompt,
+  generateDebugPrompt,
+  generatePlannerPrompt,
+} from '@/lib/agents'
 
 export async function POST(req: NextRequest) {
   try {
@@ -75,37 +53,36 @@ export async function POST(req: NextRequest) {
 
     const agent = getAgent(selectedAgentType)
 
-    // For analyzer agent, use the dedicated function
+    // Generate prompt using agent-specific function
+    const promptParams = {
+      userQuery,
+      stack: context?.stack,
+      structure: context?.structure,
+      patterns: context?.patterns,
+    }
+
     let generatedPrompt = ''
-    if (selectedAgentType === 'analyzer') {
-      generatedPrompt = generateAnalyzerPrompt({
-        userQuery,
-        stack: context?.stack,
-        structure: context?.structure,
-        patterns: context?.patterns,
-      })
-    } else {
-      // For other agents, use Claude to generate the prompt
-      const { text } = await generateText({
-        model: claudeModel,
-        system: PROMPT_GENERATION_SYSTEM,
-        messages: [
-          {
-            role: 'user',
-            content: `Generate a structured prompt for Claude Code based on:
-
-User Query: ${userQuery}
-Agent Type: ${selectedAgentType}
-Context: ${JSON.stringify(context || {})}
-
-Use the following agent capabilities as guidance:
-${agent.capabilities.join('\n')}`,
-          },
-        ],
-        temperature: 0.5,
-      })
-
-      generatedPrompt = text
+    switch (selectedAgentType) {
+      case 'analyzer':
+        generatedPrompt = generateAnalyzerPrompt(promptParams)
+        break
+      case 'refactor':
+        generatedPrompt = generateRefactorPrompt(promptParams)
+        break
+      case 'feature':
+        generatedPrompt = generateFeaturePrompt(promptParams)
+        break
+      case 'debug':
+        generatedPrompt = generateDebugPrompt(promptParams)
+        break
+      case 'planner':
+        generatedPrompt = generatePlannerPrompt(promptParams)
+        break
+      default:
+        return NextResponse.json(
+          { error: 'Invalid agent type' },
+          { status: 400 }
+        )
     }
 
     // Parse the structured prompt (simplified for now)
